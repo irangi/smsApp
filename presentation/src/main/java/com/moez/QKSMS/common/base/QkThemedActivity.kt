@@ -126,7 +126,7 @@ abstract class QkThemedActivity : QkActivity() {
     }
 
     open fun getColoredMenuItems(): List<Int> {
-        return listOf()
+        return listOf(R.id.call)
     }
 
     /**

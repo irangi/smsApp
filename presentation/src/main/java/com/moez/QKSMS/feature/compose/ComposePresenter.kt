@@ -25,8 +25,7 @@ import android.view.inputmethod.EditorInfo
 import androidx.core.widget.toast
 import com.moez.QKSMS.R
 import com.moez.QKSMS.common.Navigator
-import com.moez.QKSMS.common.androidxcompat.scope
-import com.moez.QKSMS.common.base.QkViewModel
+import com.moez.QKSMS.common.base.QkPresenter
 import com.moez.QKSMS.common.util.BillingManager
 import com.moez.QKSMS.common.util.ClipboardUtils
 import com.moez.QKSMS.common.util.MessageDetailsFormatter
@@ -73,7 +72,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Named
 
-class ComposeViewModel @Inject constructor(
+class ComposePresenter @Inject constructor(
         @Named("query") private val query: String,
         @Named("threadId") private val threadId: Long,
         @Named("address") private val address: String,
@@ -97,7 +96,7 @@ class ComposeViewModel @Inject constructor(
         private val sendMessage: SendMessage,
         private val subscriptionManager: SubscriptionManagerCompat,
         private val syncContacts: ContactSync
-) : QkViewModel<ComposeView, ComposeState>(ComposeState(
+) : QkPresenter<ComposeView, ComposeState>(ComposeState(
         editingMode = threadId == 0L && address.isBlank(),
         selectedConversation = threadId,
         query = query)
@@ -210,8 +209,8 @@ class ComposeViewModel @Inject constructor(
         }
     }
 
-    override fun bindView(view: ComposeView) {
-        super.bindView(view)
+    override fun bindIntents(view: ComposeView) {
+        super.bindIntents(view)
 
         // Set the contact suggestions list to visible at all times when in editing mode and there are no contacts
         // selected yet, and also visible while in editing mode and there is text entered in the query field

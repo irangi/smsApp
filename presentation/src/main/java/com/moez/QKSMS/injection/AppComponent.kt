@@ -26,6 +26,7 @@ import com.moez.QKSMS.common.widget.PreferenceView
 import com.moez.QKSMS.common.widget.QkEditText
 import com.moez.QKSMS.common.widget.QkSwitch
 import com.moez.QKSMS.common.widget.QkTextView
+import com.moez.QKSMS.feature.compose.injection.ComposeComponent
 import com.moez.QKSMS.feature.compose.DetailedChipView
 import com.moez.QKSMS.feature.conversationinfo.injection.ConversationInfoComponent
 import com.moez.QKSMS.feature.settings.SettingsController
@@ -50,6 +51,7 @@ import javax.inject.Singleton
     ServiceBuilderModule::class])
 interface AppComponent {
 
+    fun composeInfoBuilder(): ComposeComponent.Builder
     fun conversationInfoBuilder(): ConversationInfoComponent.Builder
     fun themePickerBuilder(): ThemePickerComponent.Builder
 

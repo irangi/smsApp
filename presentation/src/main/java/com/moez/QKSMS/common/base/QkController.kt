@@ -7,6 +7,8 @@ import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import com.bluelinelabs.conductor.Controller
+import com.bluelinelabs.conductor.ControllerChangeHandler
+import com.bluelinelabs.conductor.ControllerChangeType
 import com.bluelinelabs.conductor.autodispose.ControllerEvent
 import com.bluelinelabs.conductor.autodispose.ControllerScopeProvider
 import com.uber.autodispose.LifecycleScopeProvider
@@ -37,6 +39,11 @@ abstract class QkController<ViewContract : QkViewContract<State>, State, Present
     }
 
     open fun onViewCreated() {
+    }
+
+    override fun onChangeStarted(changeHandler: ControllerChangeHandler, changeType: ControllerChangeType) {
+        super.onChangeStarted(changeHandler, changeType)
+        setOptionsMenuHidden(!changeType.isEnter)
     }
 
     fun setTitle(@StringRes titleId: Int) {

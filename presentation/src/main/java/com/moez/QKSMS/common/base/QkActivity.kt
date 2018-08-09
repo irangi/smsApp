@@ -29,7 +29,7 @@ import kotlinx.android.synthetic.main.toolbar.*
 
 abstract class QkActivity : AppCompatActivity() {
 
-    protected val menu: Subject<Menu> = BehaviorSubject.create()
+    val menu: Subject<Menu> = BehaviorSubject.create()
 
     @SuppressLint("InlinedApi")
     override fun onCreate(savedInstanceState: Bundle?) {

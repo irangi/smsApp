@@ -21,14 +21,14 @@ package com.moez.QKSMS.feature.compose
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.core.view.inputmethod.InputContentInfoCompat
-import com.moez.QKSMS.common.base.QkView
+import com.moez.QKSMS.common.base.QkViewContract
 import com.moez.QKSMS.model.Attachment
 import com.moez.QKSMS.model.Contact
 import com.moez.QKSMS.model.Message
 import io.reactivex.Observable
 import io.reactivex.subjects.Subject
 
-interface ComposeView : QkView<ComposeState> {
+interface ComposeView : QkViewContract<ComposeState> {
 
     fun activityVisible(): Observable<Boolean>
     fun queryChanges(): Observable<CharSequence>
