@@ -216,7 +216,7 @@ class ComposeViewModel @Inject constructor(
         // Set the contact suggestions list to visible at all times when in editing mode and there are no contacts
         // selected yet, and also visible while in editing mode and there is text entered in the query field
         Observables
-                .combineLatest(view.queryChangedIntent, selectedContacts) { query, selectedContacts ->
+                .combineLatest(view.queryChanges(), selectedContacts) { query, selectedContacts ->
                     selectedContacts.isEmpty() || query.isNotEmpty()
                 }
                 .skipUntil(state.filter { state -> state.editingMode })
@@ -228,7 +228,7 @@ class ComposeViewModel @Inject constructor(
         // Update the list of contact suggestions based on the query input, while also filtering out any contacts
         // that have already been selected
         Observables
-                .combineLatest(view.queryChangedIntent, contacts, selectedContacts) { query, contacts, selectedContacts ->
+                .combineLatest(view.queryChanges(), contacts, selectedContacts) { query, contacts, selectedContacts ->
 
                     // Strip the accents from the query. This can be an expensive operation, so
                     // cache the result instead of doing it for each contact
@@ -256,8 +256,8 @@ class ComposeViewModel @Inject constructor(
 
         // Backspaces should delete the most recent contact if there's no text input
         // Close the activity if user presses back
-        view.queryBackspaceIntent
-                .withLatestFrom(selectedContacts, view.queryChangedIntent) { event, contacts, query ->
+        view.queryBackspaces()
+                .withLatestFrom(selectedContacts, view.queryChanges()) { event, contacts, query ->
                     if (contacts.isNotEmpty() && query.isEmpty()) {
                         contactsReducer.onNext { it.dropLast(1) }
                     }
@@ -266,7 +266,7 @@ class ComposeViewModel @Inject constructor(
                 .subscribe()
 
         // Enter the first contact suggestion if the enter button is pressed
-        view.queryEditorActionIntent
+        view.queryEditorActions()
                 .filter { actionId -> actionId == EditorInfo.IME_ACTION_DONE }
                 .withLatestFrom(state) { _, state -> state }
                 .autoDisposable(view.scope())
@@ -278,10 +278,10 @@ class ComposeViewModel @Inject constructor(
 
         // Update the list of selected contacts when a new contact is selected or an existing one is deselected
         Observable.merge(
-                view.chipDeletedIntent.doOnNext { contact ->
+                view.chipDeleted().doOnNext { contact ->
                     contactsReducer.onNext { contacts -> contacts.filterNot { it == contact } }
                 },
-                view.chipSelectedIntent.doOnNext { contact ->
+                view.chipDeleted().doOnNext { contact ->
                     contactsReducer.onNext { contacts -> contacts.toMutableList().apply { add(contact) } }
                 })
                 .skipUntil(state.filter { state -> state.editingMode })
@@ -290,12 +290,12 @@ class ComposeViewModel @Inject constructor(
                 .subscribe()
 
         // When the menu is loaded, trigger a new state so that the menu options can be rendered correctly
-        view.menuReadyIntent
+        view.menuReady()
                 .autoDisposable(view.scope())
                 .subscribe { newState { copy() } }
 
         // Open the phone dialer if the call button is clicked
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.call }
                 .withLatestFrom(conversation) { _, conversation -> conversation }
                 .mapNotNull { conversation -> conversation.recipients[0] }
@@ -304,16 +304,16 @@ class ComposeViewModel @Inject constructor(
                 .subscribe { address -> navigator.makePhoneCall(address) }
 
         // Open the conversation settings if info button is clicked
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.info }
                 .withLatestFrom(conversation) { _, conversation -> conversation }
                 .autoDisposable(view.scope())
                 .subscribe { conversation -> navigator.showConversationInfo(conversation.id) }
 
         // Copy the message contents
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.copy }
-                .withLatestFrom(view.messagesSelectedIntent) { _, messages ->
+                .withLatestFrom(view.messagesSelected()) { _, messages ->
                     messages?.firstOrNull()?.let { messageRepo.getMessage(it) }?.let { message ->
                         ClipboardUtils.copy(context, message.getText())
                         context.makeToast(R.string.toast_copied)
@@ -323,9 +323,9 @@ class ComposeViewModel @Inject constructor(
                 .subscribe { view.clearSelection() }
 
         // Show the message details
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.details }
-                .withLatestFrom(view.messagesSelectedIntent) { _, messages -> messages }
+                .withLatestFrom(view.messagesSelected()) { _, messages -> messages }
                 .mapNotNull { messages -> messages.firstOrNull().also { view.clearSelection() } }
                 .mapNotNull(messageRepo::getMessage)
                 .map(messageDetailsFormatter::format)
@@ -333,18 +333,18 @@ class ComposeViewModel @Inject constructor(
                 .subscribe { view.showDetails(it) }
 
         // Delete the messages
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.delete }
-                .withLatestFrom(view.messagesSelectedIntent, conversation) { _, messages, conversation ->
+                .withLatestFrom(view.messagesSelected(), conversation) { _, messages, conversation ->
                     deleteMessages.execute(DeleteMessages.Params(messages, conversation.id))
                 }
                 .autoDisposable(view.scope())
                 .subscribe { view.clearSelection() }
 
         // Forward the message
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.forward }
-                .withLatestFrom(view.messagesSelectedIntent) { _, messages ->
+                .withLatestFrom(view.messagesSelected()) { _, messages ->
                     messages?.firstOrNull()?.let { messageRepo.getMessage(it) }?.let { message ->
                         val images = message.parts.filter { it.isImage() }.mapNotNull { it.getUri() }
                         navigator.showCompose(message.body, images)
@@ -355,7 +355,7 @@ class ComposeViewModel @Inject constructor(
 
 
         // Show the previous search result
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.previous }
                 .withLatestFrom(searchSelection, searchResults) { _, selection, messages ->
                     val currentPosition = messages.indexOfFirst { it.id == selection }
@@ -368,7 +368,7 @@ class ComposeViewModel @Inject constructor(
 
 
         // Show the next search result
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.next }
                 .withLatestFrom(searchSelection, searchResults) { _, selection, messages ->
                     val currentPosition = messages.indexOfFirst { it.id == selection }
@@ -381,14 +381,14 @@ class ComposeViewModel @Inject constructor(
 
 
         // Clear the search
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == R.id.clear }
                 .autoDisposable(view.scope())
                 .subscribe { newState { copy(query = "", searchSelectionId = -1) } }
 
 
         // Toggle the group sending mode
-        view.sendAsGroupIntent
+        view.sendAsGroupToggled()
                 .autoDisposable(view.scope())
                 .subscribe { newState { copy(sendAsGroup = !sendAsGroup) } }
 
@@ -402,38 +402,38 @@ class ComposeViewModel @Inject constructor(
 
 
         // Retry sending
-        view.messageClickIntent
+        view.messageClicks()
                 .filter { message -> message.isFailedMessage() }
                 .doOnNext { message -> retrySending.execute(message) }
                 .autoDisposable(view.scope())
                 .subscribe()
 
         // Update the State when the message selected count changes
-        view.messagesSelectedIntent
+        view.messagesSelected()
                 .map { selection -> selection.size }
                 .autoDisposable(view.scope())
                 .subscribe { messages -> newState { copy(selectedMessages = messages, editingMode = false) } }
 
         // Cancel sending a message
-        view.cancelSendingIntent
+        view.sendingCancelled()
                 .doOnNext { message -> view.setDraft(message.getText()) }
                 .autoDisposable(view.scope())
                 .subscribe { message -> cancelMessage.execute(message.id) }
 
         // Save draft when the activity goes into the background
-        view.activityVisibleIntent
+        view.activityVisible()
                 .filter { visible -> !visible }
                 .withLatestFrom(conversation) { _, conversation -> conversation }
                 .mapNotNull { conversation -> conversation.takeIf { it.isValid }?.id }
                 .observeOn(Schedulers.io())
-                .withLatestFrom(view.textChangedIntent) { threadId, draft ->
+                .withLatestFrom(view.textChanged()) { threadId, draft ->
                     conversationRepo.saveDraft(threadId, draft.toString())
                 }
                 .autoDisposable(view.scope())
                 .subscribe()
 
         // Mark the conversation read, if in foreground
-        Observables.combineLatest(messages, view.activityVisibleIntent) { _, visible -> visible }
+        Observables.combineLatest(messages, view.activityVisible()) { _, visible -> visible }
                 .filter { visible -> visible }
                 .withLatestFrom(conversation) { _, conversation -> conversation }
                 .mapNotNull { conversation -> conversation.takeIf { it.isValid }?.id }
@@ -442,12 +442,12 @@ class ComposeViewModel @Inject constructor(
                 .subscribe { threadId -> markRead.execute(listOf(threadId)) }
 
         // Open the attachment options
-        view.attachIntent
+        view.attachClicks()
                 .autoDisposable(view.scope())
                 .subscribe { newState { copy(attaching = !attaching) } }
 
         // Attach a photo from camera
-        view.cameraIntent
+        view.cameraClicks()
                 .autoDisposable(view.scope())
                 .subscribe {
                     if (permissionManager.hasStorage()) {
@@ -459,13 +459,13 @@ class ComposeViewModel @Inject constructor(
                 }
 
         // Attach a photo from gallery
-        view.galleryIntent
+        view.galleryClicks()
                 .doOnNext { newState { copy(attaching = false) } }
                 .autoDisposable(view.scope())
                 .subscribe { view.requestGallery() }
 
         // Choose a time to schedule the message
-        view.scheduleIntent
+        view.scheduleClicks()
                 .doOnNext { newState { copy(attaching = false) } }
                 .withLatestFrom(billingManager.upgradeStatus) { _, upgraded -> upgraded }
                 .filter { upgraded ->
@@ -476,15 +476,15 @@ class ComposeViewModel @Inject constructor(
 
         // A photo was selected
         Observable.merge(
-                view.attachmentSelectedIntent.map { uri -> Attachment(uri) },
-                view.inputContentIntent.map { inputContent -> Attachment(inputContent = inputContent) })
+                view.attachmentSelected().map { uri -> Attachment(uri) },
+                view.inputContentSelected().map { inputContent -> Attachment(inputContent = inputContent) })
                 .withLatestFrom(attachments) { attachment, attachments -> attachments + attachment }
                 .doOnNext { attachments.onNext(it) }
                 .autoDisposable(view.scope())
                 .subscribe { newState { copy(attaching = false) } }
 
         // Set the scheduled time
-        view.scheduleSelectedIntent
+        view.scheduleTimeSelected()
                 .filter { scheduled ->
                     (scheduled > System.currentTimeMillis()).also { future ->
                         if (!future) context.toast(R.string.compose_scheduled_future)
@@ -494,7 +494,7 @@ class ComposeViewModel @Inject constructor(
                 .subscribe { scheduled -> newState { copy(scheduled = scheduled) } }
 
         // Detach a photo
-        view.attachmentDeletedIntent
+        view.attachmentDeleted()
                 .withLatestFrom(attachments) { bitmap, attachments -> attachments.filter { it !== bitmap } }
                 .autoDisposable(view.scope())
                 .subscribe { attachments.onNext(it) }
@@ -519,14 +519,14 @@ class ComposeViewModel @Inject constructor(
         // Enable the send button when there is text input into the new message body or there's
         // an attachment, disable otherwise
         Observables
-                .combineLatest(view.textChangedIntent, attachments) { text, attachments ->
+                .combineLatest(view.textChanged(), attachments) { text, attachments ->
                     text.isNotBlank() || attachments.isNotEmpty()
                 }
                 .autoDisposable(view.scope())
                 .subscribe { canSend -> newState { copy(canSend = canSend) } }
 
         // Show the remaining character counter when necessary
-        view.textChangedIntent
+        view.textChanged()
                 .observeOn(Schedulers.computation())
                 .mapNotNull { draft -> tryOrNull { SmsMessage.calculateLength(draft, false) } }
                 .map { array ->
@@ -544,12 +544,12 @@ class ComposeViewModel @Inject constructor(
                 .subscribe { remaining -> newState { copy(remaining = remaining) } }
 
         // Cancel the scheduled time
-        view.scheduleCancelIntent
+        view.scheduleCancelled()
                 .autoDisposable(view.scope())
                 .subscribe { newState { copy(scheduled = 0) } }
 
         // Toggle to the next sim slot
-        view.changeSimIntent
+        view.simChanged()
                 .withLatestFrom(state) { _, state ->
                     val subs = subscriptionManager.activeSubscriptionInfoList
                     val subIndex = subs.indexOfFirst { it.subscriptionId == state.subscription?.subscriptionId }
@@ -564,8 +564,8 @@ class ComposeViewModel @Inject constructor(
                 .subscribe()
 
         // Send a message when the send button is clicked, and disable editing mode if it's enabled
-        view.sendIntent
-                .withLatestFrom(view.textChangedIntent) { _, body -> body }
+        view.sendClicks()
+                .withLatestFrom(view.textChanged()) { _, body -> body }
                 .map { body -> body.toString() }
                 .withLatestFrom(state, attachments, conversation, selectedContacts) { body, state, attachments, conversation, contacts ->
                     val subId = state.subscription?.subscriptionId ?: -1
@@ -616,15 +616,15 @@ class ComposeViewModel @Inject constructor(
                 .subscribe()
 
         // View QKSMS+
-        view.viewQksmsPlusIntent
+        view.qksmsPlusClicks()
                 .autoDisposable(view.scope())
                 .subscribe { navigator.showQksmsPlusActivity("compose_schedule") }
 
         // Navigate back
-        view.optionsItemIntent
+        view.optionItemSelected()
                 .filter { it == android.R.id.home }
                 .map { Unit }
-                .mergeWith(view.backPressedIntent)
+                .mergeWith(view.backPresses().map { Unit })
                 .withLatestFrom(state) { _, state ->
                     when {
                         state.selectedMessages > 0 -> view.clearSelection()

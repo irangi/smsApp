@@ -33,6 +33,7 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProviders
@@ -52,6 +53,7 @@ import com.moez.QKSMS.common.util.extensions.setBackgroundTint
 import com.moez.QKSMS.common.util.extensions.setTint
 import com.moez.QKSMS.common.util.extensions.setVisible
 import com.moez.QKSMS.common.util.extensions.showKeyboard
+import com.moez.QKSMS.extensions.plus
 import com.moez.QKSMS.model.Attachment
 import com.moez.QKSMS.model.Contact
 import com.moez.QKSMS.model.Message
@@ -80,32 +82,12 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
     @Inject lateinit var messageAdapter: MessagesAdapter
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
 
-    override val activityVisibleIntent: Subject<Boolean> = PublishSubject.create()
-    override val queryChangedIntent: Observable<CharSequence> by lazy { chipsAdapter.textChanges }
-    override val queryBackspaceIntent: Observable<*> by lazy { chipsAdapter.backspaces }
-    override val queryEditorActionIntent: Observable<Int> by lazy { chipsAdapter.actions }
-    override val chipSelectedIntent: Subject<Contact> by lazy { contactsAdapter.contactSelected }
-    override val chipDeletedIntent: Subject<Contact> by lazy { chipsAdapter.chipDeleted }
-    override val menuReadyIntent: Observable<Unit> = menu.map { Unit }
-    override val optionsItemIntent: Subject<Int> = PublishSubject.create()
-    override val sendAsGroupIntent by lazy { sendAsGroupBackground.clicks() }
-    override val messageClickIntent: Subject<Message> by lazy { messageAdapter.clicks }
-    override val messagesSelectedIntent by lazy { messageAdapter.selectionChanges }
-    override val cancelSendingIntent: Subject<Message> by lazy { messageAdapter.cancelSending }
-    override val attachmentDeletedIntent: Subject<Attachment> by lazy { attachmentAdapter.attachmentDeleted }
-    override val textChangedIntent by lazy { message.textChanges() }
-    override val attachIntent by lazy { Observable.merge(attach.clicks(), attachingBackground.clicks()) }
-    override val cameraIntent by lazy { Observable.merge(camera.clicks(), cameraLabel.clicks()) }
-    override val galleryIntent by lazy { Observable.merge(gallery.clicks(), galleryLabel.clicks()) }
-    override val scheduleIntent by lazy { Observable.merge(schedule.clicks(), scheduleLabel.clicks()) }
-    override val attachmentSelectedIntent: Subject<Uri> = PublishSubject.create()
-    override val inputContentIntent by lazy { message.inputContentSelected }
-    override val scheduleSelectedIntent: Subject<Long> = PublishSubject.create()
-    override val changeSimIntent by lazy { sim.clicks() }
-    override val scheduleCancelIntent by lazy { scheduledCancel.clicks() }
-    override val sendIntent by lazy { send.clicks() }
-    override val viewQksmsPlusIntent: Subject<Unit> = PublishSubject.create()
-    override val backPressedIntent: Subject<Unit> = PublishSubject.create()
+    private val activityVisibleSubject: Subject<Boolean> = PublishSubject.create()
+    private val optionsItemSubject: Subject<Int> = PublishSubject.create()
+    private val attachmentSelectedSubject: Subject<Uri> = PublishSubject.create()
+    private val scheduleSelectedSubject: Subject<Long> = PublishSubject.create()
+    private val qksmsPlusClicksSubject: Subject<Unit> = PublishSubject.create()
+    private val backPressSubject: Subject<Unit> = PublishSubject.create()
 
     private val viewModel by lazy { ViewModelProviders.of(this, viewModelFactory)[ComposeViewModel::class.java] }
 
@@ -156,12 +138,12 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
 
     override fun onStart() {
         super.onStart()
-        activityVisibleIntent.onNext(true)
+        activityVisibleSubject.onNext(true)
     }
 
     override fun onPause() {
         super.onPause()
-        activityVisibleIntent.onNext(false)
+        activityVisibleSubject.onNext(false)
     }
 
     override fun render(state: ComposeState) {
@@ -236,6 +218,58 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
         send.imageAlpha = if (state.canSend) 255 else 128
     }
 
+    override fun activityVisible(): Observable<Boolean> = activityVisibleSubject
+
+    override fun queryChanges(): Observable<CharSequence> = chipsAdapter.textChanges
+
+    override fun queryBackspaces(): Observable<*> = chipsAdapter.backspaces
+
+    override fun queryEditorActions(): Observable<Int> = chipsAdapter.actions
+
+    override fun chipSelected(): Observable<Contact> = contactsAdapter.contactSelected
+
+    override fun chipDeleted(): Observable<Contact> = chipsAdapter.chipDeleted
+
+    override fun menuReady(): Observable<*> = menu
+
+    override fun optionItemSelected(): Observable<Int> = optionsItemSubject
+
+    override fun sendAsGroupToggled(): Observable<*> = sendAsGroupBackground.clicks()
+
+    override fun messageClicks(): Subject<Message> = messageAdapter.clicks
+
+    override fun messagesSelected(): Observable<List<Long>> = messageAdapter.selectionChanges
+
+    override fun sendingCancelled(): Subject<Message> = messageAdapter.cancelSending
+
+    override fun attachmentDeleted(): Subject<Attachment> = attachmentAdapter.attachmentDeleted
+
+    override fun textChanged(): Observable<CharSequence> = message.textChanges()
+
+    override fun attachClicks(): Observable<*> = attach.clicks() + attachingBackground.clicks()
+
+    override fun cameraClicks(): Observable<*> = camera.clicks() + cameraLabel.clicks()
+
+    override fun galleryClicks(): Observable<*> = gallery.clicks() + galleryLabel.clicks()
+
+    override fun scheduleClicks(): Observable<*> = schedule.clicks() + scheduleLabel.clicks()
+
+    override fun attachmentSelected(): Observable<Uri> = attachmentSelectedSubject
+
+    override fun inputContentSelected(): Observable<InputContentInfoCompat> = message.inputContentSelected
+
+    override fun scheduleTimeSelected(): Observable<Long> = scheduleSelectedSubject
+
+    override fun scheduleCancelled(): Observable<*> = sim.clicks()
+
+    override fun simChanged(): Observable<*> = scheduledCancel.clicks()
+
+    override fun sendClicks(): Observable<*> = send.clicks()
+
+    override fun qksmsPlusClicks(): Subject<*> = qksmsPlusClicksSubject
+
+    override fun backPresses(): Observable<*> = backPressSubject
+
     override fun clearSelection() {
         messageAdapter.clearSelection()
     }
@@ -261,7 +295,7 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
                 calendar.set(Calendar.DAY_OF_MONTH, day)
                 calendar.set(Calendar.HOUR_OF_DAY, hour)
                 calendar.set(Calendar.MINUTE, minute)
-                scheduleSelectedIntent.onNext(calendar.timeInMillis)
+                scheduleSelectedSubject.onNext(calendar.timeInMillis)
             }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), DateFormat.is24HourFormat(this)).show()
         }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
     }
@@ -299,7 +333,7 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
 
     override fun showQksmsPlusSnackbar(message: Int) {
         Snackbar.make(contentView, message, Snackbar.LENGTH_LONG).run {
-            setAction(R.string.button_more) { viewQksmsPlusIntent.onNext(Unit) }
+            setAction(R.string.button_more) { qksmsPlusClicksSubject.onNext(Unit) }
             show()
         }
     }
@@ -310,7 +344,7 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        optionsItemIntent.onNext(item.itemId)
+        optionsItemSubject.onNext(item.itemId)
         return true
     }
 
@@ -324,12 +358,12 @@ class ComposeActivity : QkThemedActivity(), ComposeView {
                 CAMERA_REQUEST_CODE -> cameraDestination
                 GALLERY_REQUEST_CODE -> data?.data
                 else -> null
-            }?.let(attachmentSelectedIntent::onNext)
+            }?.let(attachmentSelectedSubject::onNext)
         }
     }
 
     override fun onBackPressed() {
-        backPressedIntent.onNext(Unit)
+        backPressSubject.onNext(Unit)
     }
 
 }
